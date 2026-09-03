@@ -8,11 +8,15 @@ export default class Board extends React.Component {
   constructor(props) {
     super(props);
     const clients = this.getClients();
+    const backlogClients = clients.map(client => ({
+      ...client,
+      status: 'backlog',
+    }));
     this.state = {
       clients: {
-        backlog: clients.filter(client => !client.status || client.status === 'backlog'),
-        inProgress: clients.filter(client => client.status && client.status === 'in-progress'),
-        complete: clients.filter(client => client.status && client.status === 'complete'),
+        backlog: backlogClients,
+        inProgress: [],
+        complete: [],
       }
     }
     this.swimlanes = {
@@ -20,6 +24,49 @@ export default class Board extends React.Component {
       inProgress: React.createRef(),
       complete: React.createRef(),
     }
+  }
+  componentDidMount() {
+    const drake = Dragula([
+      this.swimlanes.backlog.current,
+      this.swimlanes.inProgress.current,
+      this.swimlanes.complete.current,
+    ]);
+
+    drake.on('drop', (el, target, source) => {
+      const cardId = el.dataset.id;
+
+      let newStatus;
+
+      if (target === this.swimlanes.backlog.current) {
+        newStatus = 'backlog';
+      } else if (target === this.swimlanes.inProgress.current) {
+        newStatus = 'in-progress';
+      } else if (target === this.swimlanes.complete.current) {
+        newStatus = 'complete';
+      }
+
+      // Supprimer l'ancienne couleur
+      el.classList.remove(
+        'Card-grey',
+        'Card-blue',
+        'Card-green'
+      );
+
+      // Ajouter la nouvelle couleur
+      if (newStatus === 'backlog') {
+        el.classList.add('Card-grey');
+      } else if (newStatus === 'in-progress') {
+        el.classList.add('Card-blue');
+      } else if (newStatus === 'complete') {
+        el.classList.add('Card-green');
+      }
+
+      // Mettre à jour le statut dans le DOM
+      el.dataset.status = newStatus;
+
+      console.log('Dropped card:', cardId);
+      console.log('New status:', newStatus);
+    });
   }
   getClients() {
     return [
