@@ -5,120 +5,291 @@ import Swimlane from './Swimlane';
 import './Board.css';
 
 export default class Board extends React.Component {
+
   constructor(props) {
     super(props);
-    const clients = this.getClients();
-    const backlogClients = clients.map(client => ({
-      ...client,
-      status: 'backlog',
-    }));
+
+    // At the beginning, we don't have the clients yet.
+    // They will come from the backend.
     this.state = {
       clients: {
-        backlog: backlogClients,
+        backlog: [],
         inProgress: [],
         complete: [],
       }
-    }
+    };
+
     this.swimlanes = {
       backlog: React.createRef(),
       inProgress: React.createRef(),
       complete: React.createRef(),
-    }
+    };
   }
-  componentDidMount() {
+
+
+  // ==========================================================
+  // GET CLIENTS FROM BACKEND
+  // ==========================================================
+
+  async componentDidMount() {
+
+    try {
+
+      // Ask the backend for all clients
+      const response = await fetch(
+        'http://localhost:3001/api/v1/clients'
+      );
+
+      const clients = await response.json();
+
+      // Sort clients according to their priority
+      clients.sort((a, b) => a.priority - b.priority);
+
+      // Separate clients according to their status
+      const backlogClients = clients.filter(
+        client => client.status === 'backlog'
+      );
+
+      const inProgressClients = clients.filter(
+        client => client.status === 'in-progress'
+      );
+
+      const completeClients = clients.filter(
+        client => client.status === 'complete'
+      );
+
+      // Put the data received from the backend into React state
+      this.setState({
+        clients: {
+          backlog: backlogClients,
+          inProgress: inProgressClients,
+          complete: completeClients,
+        }
+      });
+
+    } catch (error) {
+
+      console.error(
+        'Error while fetching clients:',
+        error
+      );
+
+    }
+
+
+    // ========================================================
+    // DRAGULA
+    // ========================================================
+
     const drake = Dragula([
       this.swimlanes.backlog.current,
       this.swimlanes.inProgress.current,
       this.swimlanes.complete.current,
     ]);
 
-    drake.on('drop', (el, target, source) => {
+    this.drake = drake;
+
+
+    // ========================================================
+    // WHEN A CARD IS DROPPED
+    // ========================================================
+
+    drake.on('drop', async (el, target, source) => {
+
+      // Get the ID of the card
       const cardId = el.dataset.id;
+
+      // ------------------------------------------------------
+      // Determine the new status
+      // ------------------------------------------------------
 
       let newStatus;
 
       if (target === this.swimlanes.backlog.current) {
         newStatus = 'backlog';
+
       } else if (target === this.swimlanes.inProgress.current) {
         newStatus = 'in-progress';
+
       } else if (target === this.swimlanes.complete.current) {
         newStatus = 'complete';
       }
 
-      // Supprimer l'ancienne couleur
+
+      // ------------------------------------------------------
+      // Determine the new priority
+      // ------------------------------------------------------
+
+      /*
+       * target.children contains the cards in their
+       * current visual order.
+       *
+       * index 0 = priority 1
+       * index 1 = priority 2
+       * index 2 = priority 3
+       * ...
+       */
+
+      const cards = Array.from(target.children);
+
+      const newPriority = cards.indexOf(el) + 1;
+
+
+      // ------------------------------------------------------
+      // Update the DOM color
+      // ------------------------------------------------------
+
       el.classList.remove(
         'Card-grey',
         'Card-blue',
         'Card-green'
       );
 
-      // Ajouter la nouvelle couleur
       if (newStatus === 'backlog') {
         el.classList.add('Card-grey');
+
       } else if (newStatus === 'in-progress') {
         el.classList.add('Card-blue');
+
       } else if (newStatus === 'complete') {
         el.classList.add('Card-green');
       }
 
-      // Mettre à jour le statut dans le DOM
+
+      // Update the status stored in the DOM
       el.dataset.status = newStatus;
 
-      console.log('Dropped card:', cardId);
-      console.log('New status:', newStatus);
+
+      // ======================================================
+      // SEND UPDATE TO BACKEND
+      // ======================================================
+
+      try {
+
+        const response = await fetch(
+          `http://localhost:3001/api/v1/clients/${cardId}`,
+          {
+            method: 'PUT',
+
+            headers: {
+              'Content-Type': 'application/json',
+            },
+
+            body: JSON.stringify({
+              status: newStatus,
+              priority: newPriority,
+            }),
+          }
+        );
+
+
+        if (!response.ok) {
+          throw new Error(
+            `Backend error: ${response.status}`
+          );
+        }
+
+
+        console.log(
+          'Card successfully updated:',
+          cardId
+        );
+
+        console.log(
+          'New status:',
+          newStatus
+        );
+
+        console.log(
+          'New priority:',
+          newPriority
+        );
+
+      } catch (error) {
+
+        console.error(
+          'Error updating card:',
+          error
+        );
+
+      }
+
     });
   }
-  getClients() {
-    return [
-      ['1','Stark, White and Abbott','Cloned Optimal Architecture', 'in-progress'],
-      ['2','Wiza LLC','Exclusive Bandwidth-Monitored Implementation', 'complete'],
-      ['3','Nolan LLC','Vision-Oriented 4Thgeneration Graphicaluserinterface', 'backlog'],
-      ['4','Thompson PLC','Streamlined Regional Knowledgeuser', 'in-progress'],
-      ['5','Walker-Williamson','Team-Oriented 6Thgeneration Matrix', 'in-progress'],
-      ['6','Boehm and Sons','Automated Systematic Paradigm', 'backlog'],
-      ['7','Runolfsson, Hegmann and Block','Integrated Transitional Strategy', 'backlog'],
-      ['8','Schumm-Labadie','Operative Heuristic Challenge', 'backlog'],
-      ['9','Kohler Group','Re-Contextualized Multi-Tasking Attitude', 'backlog'],
-      ['10','Romaguera Inc','Managed Foreground Toolset', 'backlog'],
-      ['11','Reilly-King','Future-Proofed Interactive Toolset', 'complete'],
-      ['12','Emard, Champlin and Runolfsdottir','Devolved Needs-Based Capability', 'backlog'],
-      ['13','Fritsch, Cronin and Wolff','Open-Source 3Rdgeneration Website', 'complete'],
-      ['14','Borer LLC','Profit-Focused Incremental Orchestration', 'backlog'],
-      ['15','Emmerich-Ankunding','User-Centric Stable Extranet', 'in-progress'],
-      ['16','Willms-Abbott','Progressive Bandwidth-Monitored Access', 'in-progress'],
-      ['17','Brekke PLC','Intuitive User-Facing Customerloyalty', 'complete'],
-      ['18','Bins, Toy and Klocko','Integrated Assymetric Software', 'backlog'],
-      ['19','Hodkiewicz-Hayes','Programmable Systematic Securedline', 'backlog'],
-      ['20','Murphy, Lang and Ferry','Organized Explicit Access', 'backlog'],
-    ].map(companyDetails => ({
-      id: companyDetails[0],
-      name: companyDetails[1],
-      description: companyDetails[2],
-      status: companyDetails[3],
-    }));
+
+
+  // ==========================================================
+  // CLEANUP DRAGULA
+  // ==========================================================
+
+  componentWillUnmount() {
+
+    if (this.drake) {
+      this.drake.destroy();
+    }
+
   }
+
+
+  // ==========================================================
+  // RENDER SWIMLANE
+  // ==========================================================
+
   renderSwimlane(name, clients, ref) {
+
     return (
-      <Swimlane name={name} clients={clients} dragulaRef={ref}/>
+      <Swimlane
+        name={name}
+        clients={clients}
+        dragulaRef={ref}
+      />
     );
   }
 
+
+  // ==========================================================
+  // RENDER
+  // ==========================================================
+
   render() {
+
     return (
       <div className="Board">
+
         <div className="container-fluid">
+
           <div className="row">
+
             <div className="col-md-4">
-              {this.renderSwimlane('Backlog', this.state.clients.backlog, this.swimlanes.backlog)}
+              {this.renderSwimlane(
+                'Backlog',
+                this.state.clients.backlog,
+                this.swimlanes.backlog
+              )}
             </div>
+
+
             <div className="col-md-4">
-              {this.renderSwimlane('In Progress', this.state.clients.inProgress, this.swimlanes.inProgress)}
+              {this.renderSwimlane(
+                'In Progress',
+                this.state.clients.inProgress,
+                this.swimlanes.inProgress
+              )}
             </div>
+
+
             <div className="col-md-4">
-              {this.renderSwimlane('Complete', this.state.clients.complete, this.swimlanes.complete)}
+              {this.renderSwimlane(
+                'Complete',
+                this.state.clients.complete,
+                this.swimlanes.complete
+              )}
             </div>
+
           </div>
+
         </div>
+
       </div>
     );
   }
